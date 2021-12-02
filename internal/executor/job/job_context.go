@@ -116,15 +116,51 @@ func (c *ClusterJobContext) DeleteJobs(jobs []*RunningJob) {
 }
 
 func (c *ClusterJobContext) AddAnnotation(jobs []*RunningJob, annotations map[string]string) error {
+	addAnnotation := func(pod *v1.Pod, annotations map[string]string) func() {
+		return func() {
+			err := c.clusterContext.AddAnnotation(pod, annotations)
+			if err != nil {
+				log.Warnf("Failed to annotate pod %s (%s) as done: %v", pod.Name, pod.Namespace, err)
+			}
+		}
+	}
+
+	wg := &sync.WaitGroup{}
+	annotateChannel := make(chan func())
+	for i := 0; i < min(len(jobs), 100); i++ {
+		wg.Add(1)
+		go c.annotationWorker(wg, annotateChannel)
+	}
+
 	for _, job := range jobs {
 		for _, pod := range job.ActivePods {
 			err := c.clusterContext.AddAnnotation(pod, annotations)
 			if err != nil {
 				return err
 			}
+			annotateChannel <- addAnnotation(pod, annotations)
 		}
 	}
+
+	close(annotateChannel)
+	wg.Wait()
+
 	return nil
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func (c *ClusterJobContext) annotationWorker(wg *sync.WaitGroup, annotateChannel chan func()) {
+	defer wg.Done()
+
+	for annotateFunc := range annotateChannel {
+		annotateFunc()
+	}
 }
 
 func groupRunningJobs(pods []*v1.Pod) []*RunningJob {
