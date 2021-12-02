@@ -202,7 +202,7 @@ func (eventReporter *JobEventReporter) sendEvent(event api.Event) error {
 func (eventReporter *JobEventReporter) addAnnotationToMarkStateReported(pod *v1.Pod) error {
 	annotations := make(map[string]string)
 	annotationName := string(pod.Status.Phase)
-	annotations[annotationName] = time.Now().String()
+	annotations[annotationName] = time.Now().Format(time.RFC3339Nano)
 
 	return eventReporter.clusterContext.AddAnnotation(pod, annotations)
 }
@@ -210,7 +210,7 @@ func (eventReporter *JobEventReporter) addAnnotationToMarkStateReported(pod *v1.
 func (eventReporter *JobEventReporter) addAnnotationToMarkIngressReported(pod *v1.Pod) error {
 	annotations := make(map[string]string)
 	annotationName := domain2.IngressReported
-	annotations[annotationName] = time.Now().String()
+	annotations[annotationName] = time.Now().Format(time.RFC3339Nano)
 
 	return eventReporter.clusterContext.AddAnnotation(pod, annotations)
 }

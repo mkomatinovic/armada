@@ -134,10 +134,6 @@ func (c *ClusterJobContext) AddAnnotation(jobs []*RunningJob, annotations map[st
 
 	for _, job := range jobs {
 		for _, pod := range job.ActivePods {
-			err := c.clusterContext.AddAnnotation(pod, annotations)
-			if err != nil {
-				return err
-			}
 			annotateChannel <- addAnnotation(pod, annotations)
 		}
 	}
