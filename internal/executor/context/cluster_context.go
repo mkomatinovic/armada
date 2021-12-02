@@ -26,6 +26,7 @@ import (
 	"github.com/G-Research/armada/internal/executor/configuration"
 	"github.com/G-Research/armada/internal/executor/domain"
 	"github.com/G-Research/armada/internal/executor/util"
+	domain2 "github.com/G-Research/armada/pkg/client/domain"
 )
 
 const podByUIDIndex = "podUID"
@@ -116,6 +117,59 @@ func NewClusterContext(
 				return
 			}
 			context.submittedPods.Delete(util.ExtractPodKey(pod))
+		},
+		UpdateFunc: func(pre interface{}, post interface{}) {
+			prePod, ok := pre.(*v1.Pod)
+			if !ok {
+				log.Errorf("Failed to process pod event due to it being an unexpected type. Failed to process %+v", pre)
+				return
+			}
+			postPod, ok := post.(*v1.Pod)
+			if !ok {
+				log.Errorf("Failed to process pod event due to it being an unexpected type. Failed to process %+v", post)
+				return
+			}
+			_, preRunningAnnotation := prePod.Annotations[domain2.Running]
+			postAnnotation, postRunningAnnotation := postPod.Annotations[domain2.Running]
+
+			if !preRunningAnnotation && postRunningAnnotation {
+				value, err := time.Parse(time.RFC3339Nano, postAnnotation)
+				if err == nil {
+					delay := time.Now().Sub(value)
+					if delay > time.Second*5 {
+						log.Warnf("Running annotation delay %s", delay)
+					}
+				}
+
+			}
+
+			_, preSuccessAnnotationPresent := prePod.Annotations[domain2.Succeeded]
+			postSuccessAnnotation, postSuccessAnnotationPresent := postPod.Annotations[domain2.Succeeded]
+
+			if !preSuccessAnnotationPresent && postSuccessAnnotationPresent {
+				value, err := time.Parse(time.RFC3339Nano, postSuccessAnnotation)
+				if err == nil {
+					delay := time.Now().Sub(value)
+					if delay > time.Second*5 {
+						log.Warnf("Success annotation delay %s", delay)
+					}
+				}
+
+			}
+
+			_, preDoneAnnotationPresent := prePod.Annotations[domain.JobDoneAnnotation]
+			postDoneAnnotation, postDoneAnnotationPresent := postPod.Annotations[domain.JobDoneAnnotation]
+
+			if !preDoneAnnotationPresent && postDoneAnnotationPresent {
+				value, err := time.Parse(time.RFC3339Nano, postDoneAnnotation)
+				if err == nil {
+					delay := time.Now().Sub(value)
+					if delay > time.Second*5 {
+						log.Warnf("Done annotation delay %s", delay)
+					}
+				}
+
+			}
 		},
 	})
 
@@ -325,7 +379,7 @@ func (c *KubernetesClusterContext) ProcessPodsToDelete() {
 func (c *KubernetesClusterContext) markForDeletion(pod *v1.Pod) (*v1.Pod, error) {
 	annotations := make(map[string]string)
 	annotationName := domain.MarkedForDeletion
-	annotations[annotationName] = time.Now().String()
+	annotations[annotationName] = time.Now().Format(time.RFC3339Nano)
 
 	err := c.AddAnnotation(pod, annotations)
 	pod.Annotations = util2.MergeMaps(pod.Annotations, annotations)
